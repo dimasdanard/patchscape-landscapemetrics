@@ -4,57 +4,103 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>Landscape Metrics Game</title>
+<title>PatchScape: Landscape Planning Challenge</title>
 
 <style>
 
 body{
-font-family:Arial;
-background:#111;
+font-family:Segoe UI,Arial;
+background:#0f1720;
 color:white;
 text-align:center;
+margin:0;
+}
+
+h1{
+margin-top:10px;
+}
+
+.wrapper{
+display:flex;
+flex-wrap:wrap;
+justify-content:center;
+gap:20px;
+margin-top:10px;
 }
 
 canvas{
+border-radius:10px;
 border:2px solid #333;
-margin-top:10px;
 width:90vw;
 max-width:500px;
 aspect-ratio:1/1;
+background:#111;
 }
 
 .panel{
-width:90%;
-max-width:500px;
-margin:auto;
-background:#1f1f1f;
-padding:10px;
-border-radius:8px;
+background:#1b2635;
+padding:15px;
+border-radius:10px;
+width:320px;
+box-shadow:0 0 15px rgba(0,0,0,0.4);
 }
 
 table{
 width:100%;
-margin-top:10px;
 border-collapse:collapse;
+margin-top:10px;
 }
 
 td,th{
 border:1px solid #444;
-padding:5px;
+padding:6px;
+}
+
+.box{
+width:15px;
+height:15px;
+display:inline-block;
+margin-right:6px;
+}
+
+button{
+background:#2ecc71;
+border:none;
+padding:8px 12px;
+margin-top:10px;
+border-radius:6px;
+cursor:pointer;
+color:white;
+font-weight:bold;
+}
+
+button:hover{
+background:#27ae60;
 }
 
 </style>
+
 </head>
 
 <body>
 
-<h2>Landscape Metrics Planner</h2>
+<h1>PatchScape</h1>
+<p>Landscape Planning Challenge</p>
+
+<div class="wrapper">
 
 <canvas id="map" width="500" height="500"></canvas>
 
 <div class="panel">
 
-<h3>Metrics</h3>
+<h3>Landscape Types</h3>
+
+<div><span class="box" style="background:#2ecc71"></span>Forest</div>
+<div><span class="box" style="background:#f1c40f"></span>Agriculture</div>
+<div><span class="box" style="background:#555"></span>Urban</div>
+<div><span class="box" style="background:#3498db"></span>Wetland</div>
+
+<h3>Landscape Metrics</h3>
 
 <table>
 
@@ -66,25 +112,42 @@ padding:5px;
 
 <tr>
 <td>Forest Cover</td>
-<td>≥ 40%</td>
+<td id="targetForest"></td>
 <td id="forest"></td>
 </tr>
 
 <tr>
 <td>Patch Density</td>
-<td>≤ 0.20</td>
+<td id="targetPD"></td>
 <td id="pd"></td>
 </tr>
 
 <tr>
 <td>Largest Patch</td>
-<td>≥ 20%</td>
+<td id="targetLPI"></td>
 <td id="lpi"></td>
+</tr>
+
+<tr>
+<td>Connectivity</td>
+<td id="targetConn"></td>
+<td id="conn"></td>
+</tr>
+
+<tr>
+<td>Habitat Suitability</td>
+<td id="targetHab"></td>
+<td id="hab"></td>
 </tr>
 
 </table>
 
+<button onclick="checkLevel()">Check Plan</button>
 <button onclick="resetMap()">Reset</button>
+
+<p id="levelInfo"></p>
+
+</div>
 
 </div>
 
@@ -97,7 +160,23 @@ const cell=25
 const canvas=document.getElementById("map")
 const ctx=canvas.getContext("2d")
 
+const types=["urban","forest","agriculture","wetland"]
+
+const colors={
+urban:"#555",
+forest:"#2ecc71",
+agriculture:"#f1c40f",
+wetland:"#3498db"
+}
+
 let grid=[]
+let level=0
+
+const levels=[
+{forest:40,pd:0.2,lpi:20,conn:0.5,hab:60},
+{forest:50,pd:0.15,lpi:25,conn:0.6,hab:70},
+{forest:60,pd:0.12,lpi:30,conn:0.7,hab:80}
+]
 
 function init(){
 
@@ -114,6 +193,8 @@ grid[r][c]="urban"
 }
 
 draw()
+
+updateTargets()
 
 }
 
@@ -138,8 +219,8 @@ draw()
 
 function toggleCell(r,c){
 
-if(grid[r][c]=="urban") grid[r][c]="forest"
-else grid[r][c]="urban"
+let i=types.indexOf(grid[r][c])
+grid[r][c]=types[(i+1)%types.length]
 
 }
 
@@ -150,12 +231,11 @@ ctx.clearRect(0,0,canvas.width,canvas.height)
 for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
-if(grid[r][c]=="forest") ctx.fillStyle="#00aa55"
-else ctx.fillStyle="#444"
+ctx.fillStyle=colors[grid[r][c]]
 
 ctx.fillRect(c*cell,r*cell,cell,cell)
 
-ctx.strokeStyle="#222"
+ctx.strokeStyle="#111"
 ctx.strokeRect(c*cell,r*cell,cell,cell)
 
 }
@@ -167,94 +247,46 @@ calculateMetrics()
 
 function calculateMetrics(){
 
-let forestCount=0
+let forest=0
+let patches=0
+let largest=0
+let visited={}
 
 for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
-if(grid[r][c]=="forest") forestCount++
+if(grid[r][c]=="forest") forest++
 
 }
 }
 
 let total=rows*cols
 
-let forestCover=(forestCount/total)*100
+let forestCover=(forest/total)*100
+document.getElementById("forest").innerText=forestCover.toFixed(1)+"%"
 
-document.getElementById("forest").innerText=forestCover.toFixed(1)+" %"
-
-let patches=0
-let visited={}
+/* PATCH DETECTION */
 
 for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
-if(grid[r][c]=="forest" && !visited[r+"-"+c]){
+let key=r+"-"+c
+
+if(grid[r][c]=="forest" && !visited[key]){
 
 patches++
 
-let stack=[[r,c]]
-
-while(stack.length){
-
-let [rr,cc]=stack.pop()
-
-let key=rr+"-"+cc
-
-if(visited[key]) continue
-
-visited[key]=true
-
-[[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{
-
-let nr=rr+d[0]
-let nc=cc+d[1]
-
-if(nr>=0 && nr<rows && nc>=0 && nc<cols){
-
-if(grid[nr][nc]=="forest"){
-
-stack.push([nr,nc])
-
-}
-
-}
-
-})
-
-}
-
-}
-
-}
-}
-
-let pd=patches/(rows*cols)
-
-document.getElementById("pd").innerText=pd.toFixed(3)
-
-let largest=0
-visited={}
-
-for(let r=0;r<rows;r++){
-for(let c=0;c<cols;c++){
-
-if(grid[r][c]=="forest" && !visited[r+"-"+c]){
-
 let size=0
-
 let stack=[[r,c]]
 
 while(stack.length){
 
 let [rr,cc]=stack.pop()
+let k=rr+"-"+cc
 
-let key=rr+"-"+cc
+if(visited[k]) continue
 
-if(visited[key]) continue
-
-visited[key]=true
-
+visited[k]=true
 size++
 
 [[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{
@@ -264,11 +296,7 @@ let nc=cc+d[1]
 
 if(nr>=0 && nr<rows && nc>=0 && nc<cols){
 
-if(grid[nr][nc]=="forest"){
-
-stack.push([nr,nc])
-
-}
+if(grid[nr][nc]=="forest") stack.push([nr,nc])
 
 }
 
@@ -283,9 +311,73 @@ if(size>largest) largest=size
 }
 }
 
-let lpi=(largest/(rows*cols))*100
+/* PATCH DENSITY */
 
-document.getElementById("lpi").innerText=lpi.toFixed(1)+" %"
+let pd=patches/(rows*cols)
+document.getElementById("pd").innerText=pd.toFixed(3)
+
+/* LARGEST PATCH */
+
+let lpi=(largest/(rows*cols))*100
+document.getElementById("lpi").innerText=lpi.toFixed(1)+"%"
+
+/* CONNECTIVITY */
+
+let conn=Math.min(1,(largest/forest)||0)
+document.getElementById("conn").innerText=conn.toFixed(2)
+
+/* HABITAT SUITABILITY */
+
+let habitat=(forestCover*0.6)+(conn*40)
+document.getElementById("hab").innerText=Math.min(100,habitat).toFixed(1)
+
+}
+
+function updateTargets(){
+
+let t=levels[level]
+
+document.getElementById("targetForest").innerText="≥ "+t.forest+"%"
+document.getElementById("targetPD").innerText="≤ "+t.pd
+document.getElementById("targetLPI").innerText="≥ "+t.lpi+"%"
+document.getElementById("targetConn").innerText="≥ "+t.conn
+document.getElementById("targetHab").innerText="≥ "+t.hab
+
+document.getElementById("levelInfo").innerText="Level "+(level+1)
+
+}
+
+function checkLevel(){
+
+let forest=parseFloat(document.getElementById("forest").innerText)
+let pd=parseFloat(document.getElementById("pd").innerText)
+let lpi=parseFloat(document.getElementById("lpi").innerText)
+let conn=parseFloat(document.getElementById("conn").innerText)
+let hab=parseFloat(document.getElementById("hab").innerText)
+
+let t=levels[level]
+
+if(forest>=t.forest && pd<=t.pd && lpi>=t.lpi && conn>=t.conn && hab>=t.hab){
+
+alert("Level Completed!")
+
+level++
+
+if(level>=levels.length){
+
+alert("You completed all PatchScape levels!")
+
+}else{
+
+init()
+
+}
+
+}else{
+
+alert("Targets not achieved. Improve landscape configuration.")
+
+}
 
 }
 
