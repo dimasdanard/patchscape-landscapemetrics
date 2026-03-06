@@ -29,7 +29,7 @@ margin-top:10px;
 background:#1b2635;
 padding:15px;
 border-radius:10px;
-width:260px;
+width:280px;
 box-shadow:0 0 15px rgba(0,0,0,0.4);
 text-align:left;
 }
@@ -84,6 +84,18 @@ font-weight:bold;
 
 button:hover{
 background:#27ae60;
+}
+
+.guide{
+font-size:13px;
+line-height:1.5;
+color:#ddd;
+}
+
+.metric{
+margin-top:10px;
+font-size:12px;
+color:#ccc;
 }
 
 </style>
@@ -169,19 +181,75 @@ background:#27ae60;
 
 </div>
 
+
 <canvas id="map" width="500" height="500"></canvas>
 
-<div class="panel">
 
-<h3>Guide</h3>
+<div class="panel guide">
 
-Select a landscape tool.
+<h3>Game Guide</h3>
 
-Drag the mouse to paint multiple cells.
+1. The landscape initially appears in a semi-random clustered configuration.
 
-Your goal is to reorganize the landscape to achieve ecological targets.
+2. Your task is to improve the spatial arrangement of the landscape to meet ecological targets.
 
-Urban areas should be reduced or reorganized to improve connectivity.
+3. Select a landscape tool and drag the mouse to paint areas.
+
+4. Try to reorganize urban areas to reduce fragmentation.
+
+5. Increase forest cover and improve connectivity between landscape patches.
+
+6. When you think the landscape meets the targets, press **Check Plan**.
+
+7. If successful, you will progress to the next level with more challenging targets.
+
+
+<h3>Metric Explanation</h3>
+
+<div class="metric">
+<b>Forest Cover</b><br>
+Percentage of forest cells in the landscape.
+
+Formula:<br>
+Forest Cover = (Forest Cells / Total Cells) × 100
+</div>
+
+<div class="metric">
+<b>Patch Density (Urban)</b><br>
+Number of separated urban patches divided by total landscape cells.
+
+Formula:<br>
+PD = Number of Urban Patches / Landscape Area
+</div>
+
+<div class="metric">
+<b>Largest Patch Index (Urban)</b><br>
+Percentage of landscape occupied by the largest urban cluster.
+
+Formula:<br>
+LPI = (Largest Urban Patch / Landscape Area) × 100
+</div>
+
+<div class="metric">
+<b>Connectivity</b><br>
+Average connectivity of all land-cover classes.
+
+Connectivity for each class =
+
+Largest Patch of Class / Total Area of Class
+
+Overall Connectivity =
+
+Average of all class connectivity values
+</div>
+
+<div class="metric">
+<b>Habitat Suitability</b><br>
+Composite ecological score combining forest cover and connectivity.
+
+Formula:<br>
+Habitat Score = (Forest Cover × 0.6) + (Connectivity × 40)
+</div>
 
 </div>
 
@@ -225,25 +293,29 @@ document.getElementById("tool_"+type).classList.add("active")
 
 }
 
+/* CLUSTERED LANDSCAPE GENERATION */
+
 function init(){
 
 grid=[]
 
 for(let r=0;r<rows;r++){
-
 grid[r]=[]
-
 for(let c=0;c<cols;c++){
 
-let rand=Math.random()
+let types=["urban","forest","agriculture","wetland"]
 
-if(rand<0.25) grid[r][c]="forest"
-else if(rand<0.45) grid[r][c]="agriculture"
-else if(rand<0.75) grid[r][c]="urban"
-else grid[r][c]="wetland"
+if(r>0 && c>0 && Math.random()<0.65){
+
+grid[r][c]=grid[r-1][c]
+
+}else{
+
+grid[r][c]=types[Math.floor(Math.random()*types.length)]
 
 }
 
+}
 }
 
 draw()
@@ -256,9 +328,7 @@ painting=true
 paint(e)
 })
 
-canvas.addEventListener("mouseup",()=>{
-painting=false
-})
+canvas.addEventListener("mouseup",()=>painting=false)
 
 canvas.addEventListener("mousemove",e=>{
 if(painting) paint(e)
@@ -280,7 +350,6 @@ let c=Math.floor(x/cell)
 if(r>=0 && r<rows && c>=0 && c<cols){
 
 grid[r][c]=currentType
-
 draw()
 
 }
@@ -307,33 +376,22 @@ calculateMetrics()
 
 }
 
+/* METRICS */
+
 function calculateMetrics(){
 
 let forest=0
 let patchesUrban=0
 let largestUrban=0
-
 let visited={}
 
-let classArea={
-forest:0,
-agriculture:0,
-urban:0,
-wetland:0
-}
-
-let largestClass={
-forest:0,
-agriculture:0,
-urban:0,
-wetland:0
-}
+let classArea={forest:0,agriculture:0,urban:0,wetland:0}
+let largestClass={forest:0,agriculture:0,urban:0,wetland:0}
 
 for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
 let t=grid[r][c]
-
 classArea[t]++
 
 if(t=="forest") forest++
@@ -342,7 +400,6 @@ if(t=="forest") forest++
 }
 
 let total=rows*cols
-
 let forestCover=(forest/total)*100
 
 document.getElementById("forest").innerText=forestCover.toFixed(1)+"%"
@@ -363,7 +420,6 @@ let stack=[[r,c]]
 while(stack.length){
 
 let [rr,cc]=stack.pop()
-
 let k=rr+"-"+cc
 
 if(visited[k]) continue
@@ -380,9 +436,7 @@ let nc=cc+d[1]
 if(nr>=0 && nr<rows && nc>=0 && nc<cols){
 
 if(grid[nr][nc]==type){
-
 stack.push([nr,nc])
-
 }
 
 }
@@ -397,9 +451,7 @@ if(size>largestUrban) largestUrban=size
 }
 
 if(size>largestClass[type]){
-
 largestClass[type]=size
-
 }
 
 }
@@ -408,11 +460,9 @@ largestClass[type]=size
 }
 
 let pd=patchesUrban/(rows*cols)
-
 document.getElementById("pd").innerText=pd.toFixed(3)
 
 let lpi=(largestUrban/(rows*cols))*100
-
 document.getElementById("lpi").innerText=lpi.toFixed(1)+"%"
 
 let connForest=largestClass.forest/(classArea.forest||1)
@@ -421,11 +471,9 @@ let connUrban=largestClass.urban/(classArea.urban||1)
 let connWet=largestClass.wetland/(classArea.wetland||1)
 
 let connectivity=(connForest+connAgri+connUrban+connWet)/4
-
 document.getElementById("conn").innerText=connectivity.toFixed(2)
 
 let habitat=(forestCover*0.6)+(connectivity*40)
-
 document.getElementById("hab").innerText=Math.min(100,habitat).toFixed(1)
 
 }
@@ -461,13 +509,9 @@ alert("Level Completed!")
 level++
 
 if(level>=levels.length){
-
 alert("You completed all PatchScape levels!")
-
 }else{
-
 init()
-
 }
 
 }else{
