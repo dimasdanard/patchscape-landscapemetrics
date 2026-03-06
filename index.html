@@ -86,12 +86,6 @@ button:hover{
 background:#27ae60;
 }
 
-.guide{
-font-size:13px;
-line-height:1.5;
-color:#ddd;
-}
-
 .metric{
 margin-top:10px;
 font-size:12px;
@@ -181,74 +175,40 @@ color:#ccc;
 
 </div>
 
-
 <canvas id="map" width="500" height="500"></canvas>
 
+<div class="panel">
 
-<div class="panel guide">
+<h3>Guide</h3>
 
-<h3>Game Guide</h3>
+Select a landscape tool.
 
-1. The landscape initially appears in a semi-random clustered configuration.
+Click and drag the mouse to paint areas.
 
-2. Your task is to improve the spatial arrangement of the landscape to meet ecological targets.
+Your goal is to reorganize the landscape to meet ecological targets.
 
-3. Select a landscape tool and drag the mouse to paint areas.
-
-4. Try to reorganize urban areas to reduce fragmentation.
-
-5. Increase forest cover and improve connectivity between landscape patches.
-
-6. When you think the landscape meets the targets, press **Check Plan**.
-
-7. If successful, you will progress to the next level with more challenging targets.
-
+Reduce fragmentation of urban areas and improve forest connectivity.
 
 <h3>Metric Explanation</h3>
 
 <div class="metric">
-<b>Forest Cover</b><br>
-Percentage of forest cells in the landscape.
-
-Formula:<br>
 Forest Cover = (Forest Cells / Total Cells) × 100
 </div>
 
 <div class="metric">
-<b>Patch Density (Urban)</b><br>
-Number of separated urban patches divided by total landscape cells.
-
-Formula:<br>
-PD = Number of Urban Patches / Landscape Area
+Patch Density (Urban) = Number of Urban Patches / Landscape Area
 </div>
 
 <div class="metric">
-<b>Largest Patch Index (Urban)</b><br>
-Percentage of landscape occupied by the largest urban cluster.
-
-Formula:<br>
-LPI = (Largest Urban Patch / Landscape Area) × 100
+Largest Patch Index (Urban) = (Largest Urban Patch / Landscape Area) × 100
 </div>
 
 <div class="metric">
-<b>Connectivity</b><br>
-Average connectivity of all land-cover classes.
-
-Connectivity for each class =
-
-Largest Patch of Class / Total Area of Class
-
-Overall Connectivity =
-
-Average of all class connectivity values
+Connectivity = Average connectivity of all landscape classes
 </div>
 
 <div class="metric">
-<b>Habitat Suitability</b><br>
-Composite ecological score combining forest cover and connectivity.
-
-Formula:<br>
-Habitat Score = (Forest Cover × 0.6) + (Connectivity × 40)
+Habitat Suitability = (Forest Cover × 0.6) + (Connectivity × 40)
 </div>
 
 </div>
@@ -293,21 +253,28 @@ document.getElementById("tool_"+type).classList.add("active")
 
 }
 
-/* CLUSTERED LANDSCAPE GENERATION */
+/* CLUSTERED LANDSCAPE GENERATOR */
 
 function init(){
 
 grid=[]
 
+const types=["urban","forest","agriculture","wetland"]
+
 for(let r=0;r<rows;r++){
+
 grid[r]=[]
+
 for(let c=0;c<cols;c++){
 
-let types=["urban","forest","agriculture","wetland"]
+let neighbors=[]
 
-if(r>0 && c>0 && Math.random()<0.65){
+if(r>0) neighbors.push(grid[r-1][c])
+if(c>0) neighbors.push(grid[r][c-1])
 
-grid[r][c]=grid[r-1][c]
+if(neighbors.length>0 && Math.random()<0.65){
+
+grid[r][c]=neighbors[Math.floor(Math.random()*neighbors.length)]
 
 }else{
 
@@ -316,6 +283,7 @@ grid[r][c]=types[Math.floor(Math.random()*types.length)]
 }
 
 }
+
 }
 
 draw()
@@ -471,9 +439,11 @@ let connUrban=largestClass.urban/(classArea.urban||1)
 let connWet=largestClass.wetland/(classArea.wetland||1)
 
 let connectivity=(connForest+connAgri+connUrban+connWet)/4
+
 document.getElementById("conn").innerText=connectivity.toFixed(2)
 
 let habitat=(forestCover*0.6)+(connectivity*40)
+
 document.getElementById("hab").innerText=Math.min(100,habitat).toFixed(1)
 
 }
@@ -509,9 +479,13 @@ alert("Level Completed!")
 level++
 
 if(level>=levels.length){
+
 alert("You completed all PatchScape levels!")
+
 }else{
+
 init()
+
 }
 
 }else{
