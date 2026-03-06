@@ -12,8 +12,8 @@ body{
 font-family:Segoe UI,Arial;
 background:#0f1720;
 color:white;
-text-align:center;
 margin:0;
+text-align:center;
 }
 
 h1{
@@ -22,27 +22,39 @@ margin-top:10px;
 
 .wrapper{
 display:flex;
-flex-wrap:wrap;
 justify-content:center;
+align-items:flex-start;
 gap:20px;
+flex-wrap:wrap;
 margin-top:10px;
-}
-
-canvas{
-border-radius:10px;
-border:2px solid #333;
-width:90vw;
-max-width:500px;
-aspect-ratio:1/1;
-background:#111;
 }
 
 .panel{
 background:#1b2635;
 padding:15px;
 border-radius:10px;
-width:320px;
+width:260px;
 box-shadow:0 0 15px rgba(0,0,0,0.4);
+text-align:left;
+}
+
+canvas{
+width:500px;
+height:500px;
+background:#111;
+border-radius:10px;
+border:2px solid #333;
+}
+
+.legend div{
+margin:6px 0;
+}
+
+.box{
+width:16px;
+height:16px;
+display:inline-block;
+margin-right:6px;
 }
 
 table{
@@ -54,13 +66,7 @@ margin-top:10px;
 td,th{
 border:1px solid #444;
 padding:6px;
-}
-
-.box{
-width:15px;
-height:15px;
-display:inline-block;
-margin-right:6px;
+text-align:center;
 }
 
 button{
@@ -78,6 +84,38 @@ button:hover{
 background:#27ae60;
 }
 
+.guide{
+font-size:13px;
+line-height:1.5;
+color:#ddd;
+}
+
+.metric{
+margin-top:10px;
+font-size:12px;
+color:#ccc;
+}
+
+@media (max-width:900px){
+
+.wrapper{
+flex-direction:column;
+align-items:center;
+}
+
+.panel{
+width:90%;
+}
+
+canvas{
+width:90vw;
+height:90vw;
+max-width:500px;
+max-height:500px;
+}
+
+}
+
 </style>
 
 </head>
@@ -89,16 +127,18 @@ background:#27ae60;
 
 <div class="wrapper">
 
-<canvas id="map" width="500" height="500"></canvas>
+<!-- LEFT PANEL -->
 
 <div class="panel">
 
 <h3>Landscape Types</h3>
 
+<div class="legend">
 <div><span class="box" style="background:#2ecc71"></span>Forest</div>
 <div><span class="box" style="background:#f1c40f"></span>Agriculture</div>
 <div><span class="box" style="background:#555"></span>Urban</div>
 <div><span class="box" style="background:#3498db"></span>Wetland</div>
+</div>
 
 <h3>Landscape Metrics</h3>
 
@@ -117,13 +157,13 @@ background:#27ae60;
 </tr>
 
 <tr>
-<td>Patch Density</td>
+<td>Patch Density (Urban)</td>
 <td id="targetPD"></td>
 <td id="pd"></td>
 </tr>
 
 <tr>
-<td>Largest Patch</td>
+<td>Largest Patch (Urban)</td>
 <td id="targetLPI"></td>
 <td id="lpi"></td>
 </tr>
@@ -146,6 +186,57 @@ background:#27ae60;
 <button onclick="resetMap()">Reset</button>
 
 <p id="levelInfo"></p>
+
+</div>
+
+<!-- MAP -->
+
+<canvas id="map" width="500" height="500"></canvas>
+
+<!-- GUIDE PANEL -->
+
+<div class="panel guide">
+
+<h3>Guide</h3>
+
+Click a cell to change landscape type.
+
+Cycle order:
+
+Urban → Forest → Agriculture → Wetland
+
+Design landscape configuration that meets ecological targets.
+
+Press **Check Plan** to evaluate your design.
+
+<h3>Metric Explanation</h3>
+
+<div class="metric">
+<b>Forest Cover</b><br>
+Percentage of forest cells within the landscape.
+</div>
+
+<div class="metric">
+<b>Patch Density (Urban)</b><br>
+Number of urban patches divided by total landscape area.
+Lower values indicate less fragmentation.
+</div>
+
+<div class="metric">
+<b>Largest Patch Index (Urban)</b><br>
+Percentage of landscape occupied by the largest urban patch.
+</div>
+
+<div class="metric">
+<b>Connectivity</b><br>
+Average connectivity of all land-cover classes based on
+largest patch proportion within each class.
+</div>
+
+<div class="metric">
+<b>Habitat Suitability</b><br>
+Composite score based on forest cover and landscape connectivity.
+</div>
 
 </div>
 
@@ -193,7 +284,6 @@ grid[r][c]="urban"
 }
 
 draw()
-
 updateTargets()
 
 }
@@ -232,7 +322,6 @@ for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
 ctx.fillStyle=colors[grid[r][c]]
-
 ctx.fillRect(c*cell,r*cell,cell,cell)
 
 ctx.strokeStyle="#111"
@@ -248,34 +337,49 @@ calculateMetrics()
 function calculateMetrics(){
 
 let forest=0
-let patches=0
-let largest=0
+let patchesUrban=0
+let largestUrban=0
 let visited={}
+
+let classArea={
+forest:0,
+agriculture:0,
+urban:0,
+wetland:0
+}
+
+let largestClass={
+forest:0,
+agriculture:0,
+urban:0,
+wetland:0
+}
 
 for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
-if(grid[r][c]=="forest") forest++
+let t=grid[r][c]
+classArea[t]++
+
+if(t=="forest") forest++
 
 }
 }
 
 let total=rows*cols
-
 let forestCover=(forest/total)*100
 document.getElementById("forest").innerText=forestCover.toFixed(1)+"%"
 
-/* PATCH DETECTION */
+visited={}
 
 for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
 let key=r+"-"+c
 
-if(grid[r][c]=="forest" && !visited[key]){
+if(!visited[key]){
 
-patches++
-
+let type=grid[r][c]
 let size=0
 let stack=[[r,c]]
 
@@ -285,6 +389,7 @@ let [rr,cc]=stack.pop()
 let k=rr+"-"+cc
 
 if(visited[k]) continue
+if(grid[rr][cc]!=type) continue
 
 visited[k]=true
 size++
@@ -296,7 +401,9 @@ let nc=cc+d[1]
 
 if(nr>=0 && nr<rows && nc>=0 && nc<cols){
 
-if(grid[nr][nc]=="forest") stack.push([nr,nc])
+if(grid[nr][nc]==type){
+stack.push([nr,nc])
+}
 
 }
 
@@ -304,31 +411,37 @@ if(grid[nr][nc]=="forest") stack.push([nr,nc])
 
 }
 
-if(size>largest) largest=size
+if(type=="urban"){
+patchesUrban++
+if(size>largestUrban) largestUrban=size
+}
 
+if(size>largestClass[type]){
+largestClass[type]=size
 }
 
 }
+
+}
 }
 
-/* PATCH DENSITY */
-
-let pd=patches/(rows*cols)
+let pd=patchesUrban/(rows*cols)
 document.getElementById("pd").innerText=pd.toFixed(3)
 
-/* LARGEST PATCH */
-
-let lpi=(largest/(rows*cols))*100
+let lpi=(largestUrban/(rows*cols))*100
 document.getElementById("lpi").innerText=lpi.toFixed(1)+"%"
 
-/* CONNECTIVITY */
+let connForest=largestClass.forest/(classArea.forest||1)
+let connAgri=largestClass.agriculture/(classArea.agriculture||1)
+let connUrban=largestClass.urban/(classArea.urban||1)
+let connWet=largestClass.wetland/(classArea.wetland||1)
 
-let conn=Math.min(1,(largest/forest)||0)
-document.getElementById("conn").innerText=conn.toFixed(2)
+let connectivity=(connForest+connAgri+connUrban+connWet)/4
 
-/* HABITAT SUITABILITY */
+document.getElementById("conn").innerText=connectivity.toFixed(2)
 
-let habitat=(forestCover*0.6)+(conn*40)
+let habitat=(forestCover*0.6)+(connectivity*40)
+
 document.getElementById("hab").innerText=Math.min(100,habitat).toFixed(1)
 
 }
@@ -382,9 +495,7 @@ alert("Targets not achieved. Improve landscape configuration.")
 }
 
 function resetMap(){
-
 init()
-
 }
 
 init()
