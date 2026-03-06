@@ -16,10 +16,6 @@ margin:0;
 text-align:center;
 }
 
-h1{
-margin-top:10px;
-}
-
 .wrapper{
 display:flex;
 justify-content:center;
@@ -44,10 +40,7 @@ height:500px;
 background:#111;
 border-radius:10px;
 border:2px solid #333;
-}
-
-.legend div{
-margin:6px 0;
+cursor:crosshair;
 }
 
 .box{
@@ -55,6 +48,15 @@ width:16px;
 height:16px;
 display:inline-block;
 margin-right:6px;
+}
+
+.legend div{
+margin:6px 0;
+cursor:pointer;
+}
+
+.active{
+outline:2px solid white;
 }
 
 table{
@@ -84,40 +86,7 @@ button:hover{
 background:#27ae60;
 }
 
-.guide{
-font-size:13px;
-line-height:1.5;
-color:#ddd;
-}
-
-.metric{
-margin-top:10px;
-font-size:12px;
-color:#ccc;
-}
-
-@media (max-width:900px){
-
-.wrapper{
-flex-direction:column;
-align-items:center;
-}
-
-.panel{
-width:90%;
-}
-
-canvas{
-width:90vw;
-height:90vw;
-max-width:500px;
-max-height:500px;
-}
-
-}
-
 </style>
-
 </head>
 
 <body>
@@ -127,17 +96,28 @@ max-height:500px;
 
 <div class="wrapper">
 
-<!-- LEFT PANEL -->
-
 <div class="panel">
 
-<h3>Landscape Types</h3>
+<h3>Landscape Tool</h3>
 
 <div class="legend">
-<div><span class="box" style="background:#2ecc71"></span>Forest</div>
-<div><span class="box" style="background:#f1c40f"></span>Agriculture</div>
-<div><span class="box" style="background:#555"></span>Urban</div>
-<div><span class="box" style="background:#3498db"></span>Wetland</div>
+
+<div onclick="selectType('forest')" id="tool_forest">
+<span class="box" style="background:#2ecc71"></span>Forest
+</div>
+
+<div onclick="selectType('agriculture')" id="tool_agriculture">
+<span class="box" style="background:#f1c40f"></span>Agriculture
+</div>
+
+<div onclick="selectType('urban')" id="tool_urban">
+<span class="box" style="background:#e74c3c"></span>Urban
+</div>
+
+<div onclick="selectType('wetland')" id="tool_wetland">
+<span class="box" style="background:#3498db"></span>Wetland
+</div>
+
 </div>
 
 <h3>Landscape Metrics</h3>
@@ -183,60 +163,25 @@ max-height:500px;
 </table>
 
 <button onclick="checkLevel()">Check Plan</button>
-<button onclick="resetMap()">Reset</button>
+<button onclick="init()">Reset</button>
 
 <p id="levelInfo"></p>
 
 </div>
 
-<!-- MAP -->
-
 <canvas id="map" width="500" height="500"></canvas>
 
-<!-- GUIDE PANEL -->
-
-<div class="panel guide">
+<div class="panel">
 
 <h3>Guide</h3>
 
-Click a cell to change landscape type.
+Select a landscape tool.
 
-Cycle order:
+Drag the mouse to paint multiple cells.
 
-Urban → Forest → Agriculture → Wetland
+Your goal is to reorganize the landscape to achieve ecological targets.
 
-Design landscape configuration that meets ecological targets.
-
-Press **Check Plan** to evaluate your design.
-
-<h3>Metric Explanation</h3>
-
-<div class="metric">
-<b>Forest Cover</b><br>
-Percentage of forest cells within the landscape.
-</div>
-
-<div class="metric">
-<b>Patch Density (Urban)</b><br>
-Number of urban patches divided by total landscape area.
-Lower values indicate less fragmentation.
-</div>
-
-<div class="metric">
-<b>Largest Patch Index (Urban)</b><br>
-Percentage of landscape occupied by the largest urban patch.
-</div>
-
-<div class="metric">
-<b>Connectivity</b><br>
-Average connectivity of all land-cover classes based on
-largest patch proportion within each class.
-</div>
-
-<div class="metric">
-<b>Habitat Suitability</b><br>
-Composite score based on forest cover and landscape connectivity.
-</div>
+Urban areas should be reduced or reorganized to improve connectivity.
 
 </div>
 
@@ -251,16 +196,17 @@ const cell=25
 const canvas=document.getElementById("map")
 const ctx=canvas.getContext("2d")
 
-const types=["urban","forest","agriculture","wetland"]
+let grid=[]
+let painting=false
+let currentType="forest"
 
 const colors={
-urban:"#555",
+urban:"#e74c3c",
 forest:"#2ecc71",
 agriculture:"#f1c40f",
 wetland:"#3498db"
 }
 
-let grid=[]
 let level=0
 
 const levels=[
@@ -269,7 +215,19 @@ const levels=[
 {forest:60,pd:0.12,lpi:30,conn:0.7,hab:80}
 ]
 
+function selectType(type){
+
+currentType=type
+
+document.querySelectorAll(".legend div").forEach(e=>e.classList.remove("active"))
+
+document.getElementById("tool_"+type).classList.add("active")
+
+}
+
 function init(){
+
+grid=[]
 
 for(let r=0;r<rows;r++){
 
@@ -277,7 +235,12 @@ grid[r]=[]
 
 for(let c=0;c<cols;c++){
 
-grid[r][c]="urban"
+let rand=Math.random()
+
+if(rand<0.25) grid[r][c]="forest"
+else if(rand<0.45) grid[r][c]="agriculture"
+else if(rand<0.75) grid[r][c]="urban"
+else grid[r][c]="wetland"
 
 }
 
@@ -288,7 +251,20 @@ updateTargets()
 
 }
 
-canvas.addEventListener("click",function(e){
+canvas.addEventListener("mousedown",e=>{
+painting=true
+paint(e)
+})
+
+canvas.addEventListener("mouseup",()=>{
+painting=false
+})
+
+canvas.addEventListener("mousemove",e=>{
+if(painting) paint(e)
+})
+
+function paint(e){
 
 const rect=canvas.getBoundingClientRect()
 
@@ -301,16 +277,13 @@ let y=(e.clientY-rect.top)*scaleY
 let r=Math.floor(y/cell)
 let c=Math.floor(x/cell)
 
-toggleCell(r,c)
+if(r>=0 && r<rows && c>=0 && c<cols){
+
+grid[r][c]=currentType
 
 draw()
 
-})
-
-function toggleCell(r,c){
-
-let i=types.indexOf(grid[r][c])
-grid[r][c]=types[(i+1)%types.length]
+}
 
 }
 
@@ -339,6 +312,7 @@ function calculateMetrics(){
 let forest=0
 let patchesUrban=0
 let largestUrban=0
+
 let visited={}
 
 let classArea={
@@ -359,6 +333,7 @@ for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
 let t=grid[r][c]
+
 classArea[t]++
 
 if(t=="forest") forest++
@@ -367,7 +342,9 @@ if(t=="forest") forest++
 }
 
 let total=rows*cols
+
 let forestCover=(forest/total)*100
+
 document.getElementById("forest").innerText=forestCover.toFixed(1)+"%"
 
 visited={}
@@ -386,6 +363,7 @@ let stack=[[r,c]]
 while(stack.length){
 
 let [rr,cc]=stack.pop()
+
 let k=rr+"-"+cc
 
 if(visited[k]) continue
@@ -402,7 +380,9 @@ let nc=cc+d[1]
 if(nr>=0 && nr<rows && nc>=0 && nc<cols){
 
 if(grid[nr][nc]==type){
+
 stack.push([nr,nc])
+
 }
 
 }
@@ -417,7 +397,9 @@ if(size>largestUrban) largestUrban=size
 }
 
 if(size>largestClass[type]){
+
 largestClass[type]=size
+
 }
 
 }
@@ -426,9 +408,11 @@ largestClass[type]=size
 }
 
 let pd=patchesUrban/(rows*cols)
+
 document.getElementById("pd").innerText=pd.toFixed(3)
 
 let lpi=(largestUrban/(rows*cols))*100
+
 document.getElementById("lpi").innerText=lpi.toFixed(1)+"%"
 
 let connForest=largestClass.forest/(classArea.forest||1)
@@ -494,11 +478,8 @@ alert("Targets not achieved. Improve landscape configuration.")
 
 }
 
-function resetMap(){
 init()
-}
-
-init()
+selectType("forest")
 
 </script>
 
