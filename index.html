@@ -4,125 +4,43 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>PatchScape: Landscape Planning Challenge</title>
+<title>Landscape Metrics Game</title>
 
 <style>
 
-/* GENERAL */
-
 body{
-font-family:Segoe UI,Arial;
-background:#121212;
+font-family:Arial;
+background:#111;
 color:white;
-margin:0;
 text-align:center;
 }
 
-h1{
-margin-top:10px;
-}
-
-.subtitle{
-color:#bbb;
-margin-bottom:10px;
-}
-
-/* LAYOUT */
-
-.wrapper{
-display:flex;
-justify-content:center;
-align-items:flex-start;
-gap:20px;
-flex-wrap:wrap;
-margin-top:10px;
-}
-
-.panel{
-background:#1f1f1f;
-padding:15px;
-border-radius:8px;
-box-shadow:0 0 10px rgba(0,0,0,0.5);
-}
-
-.leftpanel,.rightpanel{
-width:260px;
-text-align:left;
-}
-
-/* MAP */
-
 canvas{
+border:2px solid #333;
+margin-top:10px;
 width:90vw;
 max-width:500px;
 aspect-ratio:1/1;
-background:#111;
+}
+
+.panel{
+width:90%;
+max-width:500px;
+margin:auto;
+background:#1f1f1f;
+padding:10px;
 border-radius:8px;
-border:2px solid #333;
-cursor:pointer;
 }
-
-/* LEGEND */
-
-.box{
-width:14px;
-height:14px;
-display:inline-block;
-margin-right:6px;
-}
-
-/* BUTTON */
-
-button{
-background:#3a86ff;
-border:none;
-padding:8px 12px;
-margin:5px;
-border-radius:5px;
-color:white;
-cursor:pointer;
-}
-
-button:hover{
-background:#5aa0ff;
-}
-
-/* TABLE */
 
 table{
 width:100%;
-border-collapse:collapse;
 margin-top:10px;
+border-collapse:collapse;
 }
 
 td,th{
 border:1px solid #444;
 padding:5px;
-text-align:center;
-}
-
-/* LAYERS */
-
-.layer{
-background:#2a2a2a;
-padding:6px;
-margin-top:4px;
-border-radius:4px;
-}
-
-/* MOBILE */
-
-@media (max-width:800px){
-
-.wrapper{
-flex-direction:column;
-align-items:center;
-}
-
-.leftpanel,.rightpanel{
-width:90%;
-}
-
 }
 
 </style>
@@ -130,156 +48,58 @@ width:90%;
 
 <body>
 
-<h1>PatchScape</h1>
-<div class="subtitle">Landscape Planning Challenge</div>
-
-<div class="wrapper">
-
-<div class="panel leftpanel">
-
-<h3>Guide</h3>
-
-Click map to draw ecological corridor.<br>
-Corridor appears immediately.<br>
-Double click to finish drawing.
-
-<br><br>
-
-Delete corridor from layer list.
-
-<br><br>
-
-Meet landscape targets to unlock next level.
-
-</div>
+<h2>Landscape Metrics Planner</h2>
 
 <canvas id="map" width="500" height="500"></canvas>
 
-<div class="panel rightpanel">
+<div class="panel">
 
-<h3>Legend</h3>
-
-<div><span class="box" style="background:#ff3b3b"></span>Very Hot</div>
-<div><span class="box" style="background:#ff8c00"></span>Hot</div>
-<div><span class="box" style="background:#ffd500"></span>Moderate</div>
-<div><span class="box" style="background:#3ec1ff"></span>Cool</div>
-<div><span class="box" style="background:black"></span>Heat Source</div>
-<div><span class="box" style="background:#00ff7f"></span>Cold Source</div>
-<div><span class="box" style="background:#777"></span>Restricted Area</div>
-<div><span class="box" style="background:#00ff9c"></span>Ecological Corridor</div>
-
-<br>
-
-<button onclick="resetCorridors()">Reset</button>
-<button onclick="evaluatePlan()">PLAN</button>
-
-<h3>Corridor Layers</h3>
-<div id="layers"></div>
-
-<h3>Target vs Scenario</h3>
+<h3>Metrics</h3>
 
 <table>
 
 <tr>
-<th>Indicator</th>
+<th>Metric</th>
 <th>Target</th>
 <th>Scenario</th>
 </tr>
 
 <tr>
-<td>LST Reduction</td>
-<td id="t_lst"></td>
-<td id="s_lst"></td>
+<td>Forest Cover</td>
+<td>≥ 40%</td>
+<td id="forest"></td>
 </tr>
 
 <tr>
-<td>UHI Reduction</td>
-<td id="t_uhi"></td>
-<td id="s_uhi"></td>
+<td>Patch Density</td>
+<td>≤ 0.20</td>
+<td id="pd"></td>
 </tr>
 
 <tr>
-<td>Budget</td>
-<td id="t_budget"></td>
-<td id="s_budget"></td>
+<td>Largest Patch</td>
+<td>≥ 20%</td>
+<td id="lpi"></td>
 </tr>
 
 </table>
 
-</div>
+<button onclick="resetMap()">Reset</button>
 
 </div>
 
 <script>
 
-/* GRID SETTINGS */
-
 const rows=20
 const cols=20
 const cell=25
-const baseTemp=28
 
 const canvas=document.getElementById("map")
 const ctx=canvas.getContext("2d")
 
 let grid=[]
-let heatSources=[]
-let coldSources=[]
-let corridors=[]
-let current=[]
 
-let existingLST=0
-let existingUHI=0
-
-let level=0
-
-/* LEVEL TARGETS */
-
-const levels=[
-{lst:0.8,uhi:0.6,budget:400},
-{lst:1.5,uhi:1.2,budget:350},
-{lst:2.2,uhi:1.8,budget:320}
-]
-
-/* RESPONSIVE CLICK */
-
-function getCell(e){
-
-const rect=canvas.getBoundingClientRect()
-
-const scaleX=canvas.width/rect.width
-const scaleY=canvas.height/rect.height
-
-const x=(e.clientX-rect.left)*scaleX
-const y=(e.clientY-rect.top)*scaleY
-
-return{
-r:Math.floor(y/cell),
-c:Math.floor(x/cell)
-}
-
-}
-
-/* START LEVEL */
-
-function startLevel(){
-
-corridors=[]
-current=[]
-
-generateMap()
-updateTargets()
-draw()
-
-}
-
-/* GENERATE MAP */
-
-function generateMap(){
-
-grid=[]
-heatSources=[]
-coldSources=[]
+function init(){
 
 for(let r=0;r<rows;r++){
 
@@ -287,96 +107,41 @@ grid[r]=[]
 
 for(let c=0;c<cols;c++){
 
-let rand=Math.random()
-
-if(rand<0.05){
-grid[r][c]="heat"
-heatSources.push({r,c})
-}
-
-else if(rand<0.1){
-grid[r][c]="cold"
-coldSources.push({r,c})
-}
-
-else if(rand<0.18){
-grid[r][c]="restricted"
-}
-
-else{
 grid[r][c]="urban"
-}
 
 }
 
 }
 
-calculateBaseline()
+draw()
 
 }
 
-/* BASELINE */
+canvas.addEventListener("click",function(e){
 
-function calculateBaseline(){
+const rect=canvas.getBoundingClientRect()
 
-let total=0
-let count=0
+const scaleX=canvas.width/rect.width
+const scaleY=canvas.height/rect.height
 
-for(let r=0;r<rows;r++){
-for(let c=0;c<cols;c++){
+let x=(e.clientX-rect.left)*scaleX
+let y=(e.clientY-rect.top)*scaleY
 
-total+=cellTemp(r,c)
-count++
+let r=Math.floor(y/cell)
+let c=Math.floor(x/cell)
 
-}
-}
+toggleCell(r,c)
 
-existingLST=total/count
-existingUHI=existingLST-baseTemp
+draw()
 
-}
-
-/* TEMPERATURE MODEL */
-
-function cellTemp(r,c){
-
-let t=baseTemp
-
-heatSources.forEach(h=>{
-let d=Math.sqrt((h.r-r)**2+(h.c-c)**2)
-t+=6/(d+1)
 })
 
-coldSources.forEach(cl=>{
-let d=Math.sqrt((cl.r-r)**2+(cl.c-c)**2)
-t-=5/(d+1)
-})
+function toggleCell(r,c){
 
-corridors.forEach(line=>{
-line.forEach(p=>{
-let d=Math.sqrt((p.r-r)**2+(p.c-c)**2)
-
-if(d<2)t-=0.8
-else if(d<3)t-=0.3
-})
-})
-
-return t
+if(grid[r][c]=="urban") grid[r][c]="forest"
+else grid[r][c]="urban"
 
 }
-
-/* COLOR SCALE */
-
-function getColor(t){
-
-if(t>34) return "#ff3b3b"
-if(t>32) return "#ff8c00"
-if(t>30) return "#ffd500"
-return "#3ec1ff"
-
-}
-
-/* DRAW MAP */
 
 function draw(){
 
@@ -385,241 +150,152 @@ ctx.clearRect(0,0,canvas.width,canvas.height)
 for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
-let t=cellTemp(r,c)
+if(grid[r][c]=="forest") ctx.fillStyle="#00aa55"
+else ctx.fillStyle="#444"
 
-ctx.fillStyle=getColor(t)
 ctx.fillRect(c*cell,r*cell,cell,cell)
 
-ctx.strokeStyle="rgba(255,255,255,0.08)"
+ctx.strokeStyle="#222"
 ctx.strokeRect(c*cell,r*cell,cell,cell)
 
-if(grid[r][c]=="restricted"){
-
-ctx.fillStyle="#777"
-ctx.fillRect(c*cell,r*cell,cell,cell)
-
-}
-
-if(grid[r][c]=="heat"){
-
-ctx.fillStyle="black"
-ctx.beginPath()
-ctx.arc(c*cell+12,r*cell+12,5,0,6.28)
-ctx.fill()
-
-}
-
-if(grid[r][c]=="cold"){
-
-ctx.fillStyle="#00ff7f"
-ctx.beginPath()
-ctx.arc(c*cell+12,r*cell+12,5,0,6.28)
-ctx.fill()
-
-}
-
 }
 }
 
-drawCorridors()
-updateScenario()
+calculateMetrics()
 
 }
 
-/* DRAW CORRIDOR */
+function calculateMetrics(){
 
-function drawCorridors(){
-
-ctx.lineWidth=4
-ctx.lineCap="round"
-
-corridors.forEach(line=>{
-
-ctx.beginPath()
-
-line.forEach((p,i)=>{
-
-let x=p.c*cell+12
-let y=p.r*cell+12
-
-if(i==0) ctx.moveTo(x,y)
-else ctx.lineTo(x,y)
-
-})
-
-ctx.strokeStyle="#00ff9c"
-ctx.stroke()
-
-})
-
-if(current.length>1){
-
-ctx.beginPath()
-
-current.forEach((p,i)=>{
-
-let x=p.c*cell+12
-let y=p.r*cell+12
-
-if(i==0) ctx.moveTo(x,y)
-else ctx.lineTo(x,y)
-
-})
-
-ctx.strokeStyle="#00ffff"
-ctx.stroke()
-
-}
-
-}
-
-/* CLICK DRAW */
-
-canvas.addEventListener("click",function(e){
-
-let {r,c}=getCell(e)
-
-if(grid[r][c]=="restricted") return
-
-current.push({r,c})
-
-draw()
-
-})
-
-/* DOUBLE CLICK FINISH */
-
-canvas.addEventListener("dblclick",function(){
-
-if(current.length>1){
-
-corridors.push([...current])
-updateLayers()
-
-}
-
-current=[]
-draw()
-
-})
-
-/* LAYER PANEL */
-
-function updateLayers(){
-
-let div=document.getElementById("layers")
-div.innerHTML=""
-
-corridors.forEach((c,i)=>{
-
-let d=document.createElement("div")
-d.className="layer"
-
-d.innerHTML="Corridor "+(i+1)+" <button onclick='deleteCorridor("+i+")'>Delete</button>"
-
-div.appendChild(d)
-
-})
-
-}
-
-function deleteCorridor(i){
-
-corridors.splice(i,1)
-updateLayers()
-draw()
-
-}
-
-/* RESET */
-
-function resetCorridors(){
-
-corridors=[]
-current=[]
-updateLayers()
-draw()
-
-}
-
-/* TARGET TABLE */
-
-function updateTargets(){
-
-let t=levels[level]
-
-document.getElementById("t_lst").innerText=t.lst
-document.getElementById("t_uhi").innerText=t.uhi
-document.getElementById("t_budget").innerText="≤ "+t.budget
-
-}
-
-/* SCENARIO */
-
-function updateScenario(){
-
-let total=0
-let count=0
+let forestCount=0
 
 for(let r=0;r<rows;r++){
 for(let c=0;c<cols;c++){
 
-total+=cellTemp(r,c)
-count++
+if(grid[r][c]=="forest") forestCount++
 
 }
 }
 
-let newLST=total/count
-let newUHI=newLST-baseTemp
+let total=rows*cols
 
-let cost=0
+let forestCover=(forestCount/total)*100
 
-corridors.forEach(c=>{
-cost+=c.length*12
+document.getElementById("forest").innerText=forestCover.toFixed(1)+" %"
+
+let patches=0
+let visited={}
+
+for(let r=0;r<rows;r++){
+for(let c=0;c<cols;c++){
+
+if(grid[r][c]=="forest" && !visited[r+"-"+c]){
+
+patches++
+
+let stack=[[r,c]]
+
+while(stack.length){
+
+let [rr,cc]=stack.pop()
+
+let key=rr+"-"+cc
+
+if(visited[key]) continue
+
+visited[key]=true
+
+[[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{
+
+let nr=rr+d[0]
+let nc=cc+d[1]
+
+if(nr>=0 && nr<rows && nc>=0 && nc<cols){
+
+if(grid[nr][nc]=="forest"){
+
+stack.push([nr,nc])
+
+}
+
+}
+
 })
 
-document.getElementById("s_lst").innerText=(existingLST-newLST).toFixed(2)
-document.getElementById("s_uhi").innerText=(existingUHI-newUHI).toFixed(2)
-document.getElementById("s_budget").innerText=cost
-
-}
-
-/* PLAN */
-
-function evaluatePlan(){
-
-let lst=parseFloat(document.getElementById("s_lst").innerText)
-let uhi=parseFloat(document.getElementById("s_uhi").innerText)
-let cost=parseFloat(document.getElementById("s_budget").innerText)
-
-let t=levels[level]
-
-if(lst>=t.lst && uhi>=t.uhi && cost<=t.budget){
-
-alert("LEVEL COMPLETED")
-
-level++
-
-if(level>=levels.length){
-
-alert("You completed all levels!")
-
-}else{
-
-startLevel()
-
-}
-
-}else{
-
-alert("Target not achieved. Revise your plan.")
-
 }
 
 }
 
-startLevel()
+}
+}
+
+let pd=patches/(rows*cols)
+
+document.getElementById("pd").innerText=pd.toFixed(3)
+
+let largest=0
+visited={}
+
+for(let r=0;r<rows;r++){
+for(let c=0;c<cols;c++){
+
+if(grid[r][c]=="forest" && !visited[r+"-"+c]){
+
+let size=0
+
+let stack=[[r,c]]
+
+while(stack.length){
+
+let [rr,cc]=stack.pop()
+
+let key=rr+"-"+cc
+
+if(visited[key]) continue
+
+visited[key]=true
+
+size++
+
+[[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{
+
+let nr=rr+d[0]
+let nc=cc+d[1]
+
+if(nr>=0 && nr<rows && nc>=0 && nc<cols){
+
+if(grid[nr][nc]=="forest"){
+
+stack.push([nr,nc])
+
+}
+
+}
+
+})
+
+}
+
+if(size>largest) largest=size
+
+}
+
+}
+}
+
+let lpi=(largest/(rows*cols))*100
+
+document.getElementById("lpi").innerText=lpi.toFixed(1)+" %"
+
+}
+
+function resetMap(){
+
+init()
+
+}
+
+init()
 
 </script>
 
